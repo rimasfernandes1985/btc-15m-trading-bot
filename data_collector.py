@@ -1,24 +1,25 @@
-import ccxt  
-import pandas as pd  
-from datetime import datetime  
-
-# Configuração para Binance US (funciona no GitHub Actions)  
-exchange = ccxt.binanceus({  
-    'enableRateLimit': True  
-})  
-
-try:  
-    ohlcv = exchange.fetch_ohlcv('BTC/USDT', '15m', limit=1000)  
-    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])  
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')  
-
-    # Salvar dados  
-    try:  
-        existing = pd.read_csv('btc_data.csv')  
-        updated = pd.concat([existing, df]).drop_duplicates('timestamp')  
-        updated.to_csv('btc_data.csv', index=False)  
-    except:  
-        df.to_csv('btc_data.csv', index=False)  
-
-except Exception as e:  
-    print(f"Erro: {e}")  # Mensagem de erro para debug  
+name: BTC Data Collector
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install ccxt pandas
+      - name: Run data collector
+        run: python data_collector.py
+      - name: Commit and push
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "GitHub Actions"
+          git add btc_data.csv
+          git commit -m "Update BTC data"
+          git push
