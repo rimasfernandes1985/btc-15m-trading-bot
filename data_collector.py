@@ -4,8 +4,8 @@ from datetime import datetime
 import requests  # Adicionei no topo com outros imports
 
 def send_telegram_alert(message):
-    bot_token = "SEU_BOT_TOKEN"  # Substitua pelo seu token real
-    chat_id = "SEU_CHAT_ID"      # Substitua pelo seu chat ID
+    bot_token = "7563051006:AAFo5W_CnRV0d6hG7O4t2YD3v4tQak87hms"  # Token do BotFather
+    chat_id = "1367800874"  # Seu chat_id do @userinfobot
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={message}"
     requests.get(url).json()
 
