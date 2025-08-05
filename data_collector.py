@@ -19,3 +19,9 @@ try:
 
 except Exception as e:  
     print(f"Erro: {e}")  # Para debug  
+    try:
+    # Seu código atual de coleta de dados...
+    df.to_csv('btc_data.csv', index=False)
+    print("Dados salvos com sucesso!")  # Log para debug
+except Exception as e:
+    print(f"Erro ao salvar dados: {e}")  # Identifica onde falhou
