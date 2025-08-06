@@ -66,3 +66,4 @@ except Exception as e:
     send_telegram_alert(error_msg)
     log_to_file(f"Erro geral: {str(e)}\n{traceback.format_exc()}")
     print(traceback.format_exc())
+1
