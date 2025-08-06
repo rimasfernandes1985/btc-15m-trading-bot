@@ -1,25 +1,40 @@
 import ccxt
 import pandas as pd
 import requests
+import traceback  # Adicionado para melhor log de erros
 from datetime import datetime
-from data_preprocessor import preprocess_data  # Importação do novo módulo
+from data_preprocessor import preprocess_data
 
 def send_telegram_alert(message):
-    bot_token = "7888207477:AAFSKnKaBuOPDWPPVp25f-2AEREsjXucxvA"  # Seu token real
-    chat_id = "1367800874"  # Seu chat ID real
+    bot_token = "7888207477:AAFSKnKaBuOPDWPPVp25f-2AEREsjXucxvA"
+    chat_id = "1367800874"
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={message}"
-    requests.get(url).json()
+    try:
+        response = requests.get(url)
+        return response.json()
+    except Exception as e:
+        print(f"Erro ao enviar alerta: {str(e)}")
+        return None
 
-# Configurar exchange (KuCoin para evitar bloqueios)
-exchange = ccxt.kucoin()
+def log_to_file(message):
+    """Função para registrar erros em arquivo"""
+    with open('error_log.txt', 'a') as f:
+        f.write(f"{datetime.now()} - {message}\n")
+
+# Configurar exchange
+exchange = ccxt.kucoin({
+    'enableRateLimit': True,
+    'timeout': 30000
+})
 
 try:
-    # Coletar dados OHLCV
+    # Passo 1: Coletar dados
+    send_telegram_alert("⏳ Iniciando coleta de dados...")
     ohlcv = exchange.fetch_ohlcv('BTC/USDT', '15m', limit=1000)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
     
-    # Salvar dados brutos
+    # Passo 2: Salvar dados brutos
     try:
         existing = pd.read_csv('btc_data.csv')
         updated = pd.concat([existing, df]).drop_duplicates('timestamp')
@@ -27,19 +42,27 @@ try:
     except FileNotFoundError:
         df.to_csv('btc_data.csv', index=False)
     
-    send_telegram_alert("✅ Dados do BTC atualizados!")
+    send_telegram_alert("✅ Dados brutos do BTC atualizados!")
     
-    # PRÉ-PROCESSAMENTO PARA ML (NOVA SEÇÃO)
-    ml_data = preprocess_data(df.copy())  # Usar cópia para segurança
-    
-    if ml_data is not None:
-        # Salvar dados processados
-        ml_data.to_csv('ml_ready_data.csv', index=False)
-        send_telegram_alert("✅ Dados pré-processados para ML!")
-    else:
-        send_telegram_alert("⚠️ Falha no pré-processamento ML!")
+    # Passo 3: Pré-processamento
+    try:
+        send_telegram_alert("⏳ Iniciando pré-processamento...")
+        ml_data = preprocess_data(df.copy())
+        
+        if ml_data is not None:
+            ml_data.to_csv('ml_ready_data.csv', index=False)
+            send_telegram_alert("✅ Dados pré-processados para ML salvos!")
+        else:
+            send_telegram_alert("⚠️ Pré-processamento retornou None!")
+            log_to_file("Preprocess_data retornou None")
+    except Exception as e:
+        error_msg = f"❌ Erro no pré-processamento: {str(e)}"
+        send_telegram_alert(error_msg)
+        log_to_file(f"Erro preprocessamento: {str(e)}\n{traceback.format_exc()}")
+        print(traceback.format_exc())
 
 except Exception as e:
-    error_msg = f"❌ Erro no coletor: {str(e)}"
+    error_msg = f"❌ Erro geral: {str(e)}"
     send_telegram_alert(error_msg)
-    print(error_msg)  # Log adicional para debug
+    log_to_file(f"Erro geral: {str(e)}\n{traceback.format_exc()}")
+    print(traceback.format_exc())
