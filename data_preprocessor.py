@@ -2,26 +2,25 @@ import pandas as pd
 import numpy as np
 from ta import add_all_ta_features
 from ta.utils import dropna
+import traceback
 
 def preprocess_data(df):
-    """
-    Pré-processa dados de trading para Machine Learning
-    
-    Args:
-        df (pd.DataFrame): DataFrame com colunas: timestamp, open, high, low, close, volume
-        
-    Returns:
-        pd.DataFrame: DataFrame pré-processado com features técnicas e target
-    """
     try:
-        # Converter timestamp e ordenar
+        # Verificar colunas necessárias
+        required_cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        if not all(col in df.columns for col in required_cols):
+            missing = [col for col in required_cols if col not in df.columns]
+            print(f"Colunas faltando: {missing}")
+            return None
+            
+        # Converter timestamp
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df = df.sort_values('timestamp').reset_index(drop=True)
         
         # Remover valores NaN
         df = dropna(df)
         
-        # Adicionar todos os indicadores técnicos
+        # Adicionar indicadores
         df = add_all_ta_features(
             df, 
             open="open", 
@@ -32,24 +31,23 @@ def preprocess_data(df):
             fillna=True
         )
         
-        # Criar features derivadas
+        # Features adicionais
         df['price_change'] = df['close'].pct_change()
         df['volatility'] = df['close'].rolling(window=5).std()
         
-        # Criar target (preço futuro +1%)
+        # Target
         df['target'] = np.where(
             df['close'].shift(-1) > df['close'] * 1.01, 1, 0
         )
         
-        # Remover últimas linhas sem target
+        # Remover linhas sem target
         df = df.dropna(subset=['target'])
         
-        # Selecionar colunas relevantes
+        # Selecionar colunas
         keep_cols = [col for col in df.columns if not col.startswith(('trend_psar', 'others'))]
-        df = df[keep_cols].copy()
-        
-        return df
+        return df[keep_cols].copy()
     
     except Exception as e:
         print(f"Erro no pré-processamento: {e}")
-        return None 
+        print(traceback.format_exc())
+        return None
