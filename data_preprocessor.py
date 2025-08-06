@@ -52,4 +52,4 @@ def preprocess_data(df):
     
     except Exception as e:
         print(f"Erro no pré-processamento: {e}")
-        return None
+        return None 
