@@ -1,9 +1,9 @@
 name: BTC Data Collector
 
 on:
-  workflow_dispatch:  # Permite execução manual
+  workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'  # A cada 15 minutos
+    - cron: '*/15 * * * *'
 
 jobs:
   collect:
@@ -17,7 +17,7 @@ jobs:
           python-version: '3.10'
           
       - name: Install dependencies
-        run: pip install ccxt pandas ta numpy  # ATUALIZADO: adicionado 'ta' e 'numpy'
+        run: pip install ccxt pandas ta numpy  # CORRIGIDO: "ccxt" em vez de "cost"
         
       - name: Run data collector
         run: python data_collector.py
@@ -28,8 +28,12 @@ jobs:
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git add btc_data.csv
-          git add ml_ready_data.csv  # NOVO: adiciona o arquivo de dados processados
-          git add error_log.txt  # NOVO: adiciona o log de erros se existir
-          git commit -m "Update BTC data [skip ci]"
+          
+          # Adiciona apenas arquivos que existem
+          [ -f btc_data.csv ] && git add btc_data.csv
+          [ -f ml_ready_data.csv ] && git add ml_ready_data.csv
+          [ -f error_log.txt ] && git add error_log.txt
+          
+          # Comita apenas se houver alterações
+          git diff-index --quiet HEAD || git commit -m "Update BTC data [skip ci]"
           git push
