@@ -1,9 +1,12 @@
 name: BTC Data Collector
 
 on:
-  workflow_dispatch:  # Permite execução manual
+  workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'  # Executa a cada 15 minutos
+    - cron: '*/15 * * * *'
+
+permissions:
+  contents: write  # PERMISSÃO CRÍTICA
 
 jobs:
   collect:
@@ -12,7 +15,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Importante para o histórico de commits
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}  # TOKEN EXPLÍCITO
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -34,12 +38,10 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
           
-          # Adiciona apenas arquivos que existem
           [ -f btc_data.csv ] && git add btc_data.csv
           [ -f ml_ready_data.csv ] && git add ml_ready_data.csv
           [ -f error_log.txt ] && git add error_log.txt
           
-          # Verifica se há alterações para commitar
           if git diff-index --quiet HEAD; then
             echo "Sem alterações para commitar."
           else
