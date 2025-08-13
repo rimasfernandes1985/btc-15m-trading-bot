@@ -1,51 +1,60 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime
 
 def generate_report():
-    # Carregar dados
     df = pd.read_csv('ml_ready_data.csv')
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     
-    # Gráfico de preços
-    plt.figure(figsize=(14, 7))
-    plt.plot(df['timestamp'], df['close'], label='BTC/USDT', linewidth=2)
-    plt.title('Histórico de Preços - Últimas 24h', fontsize=16)
-    plt.xlabel('Horário', fontsize=12)
-    plt.ylabel('Preço (USDT)', fontsize=12)
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig('price_chart.png', dpi=300)
+    # Cálculo de métricas
+    last_signal = "COMPRA" if df['target'].iloc[-1] == 1 else "NEUTRO"
+    win_rate = df['target'].mean() if 'target' in df.columns else 0
     
-    # Relatório HTML
-    report = f"""
+    # Gráfico avançado
+    plt.figure(figsize=(14, 10))
+    
+    # Preço
+    plt.subplot(2, 1, 1)
+    plt.plot(df['timestamp'], df['close'], label='Preço BTC', color='royalblue')
+    plt.title(f'Monitor de Trading - Última Atualização: {datetime.now().strftime("%d/%m %H:%M")}')
+    plt.ylabel('Preço (USDT)')
+    plt.grid(True)
+    
+    # Sinais
+    if 'target' in df.columns:
+        signals = df[df['target'] == 1]
+        plt.scatter(signals['timestamp'], signals['close'], 
+                   color='green', marker='^', label='Sinais de Compra')
+    
+    plt.legend()
+    
+    # Volatilidade
+    plt.subplot(2, 1, 2)
+    df['returns'] = df['close'].pct_change()
+    df['volatility'] = df['returns'].rolling(20).std() * np.sqrt(365)
+    plt.plot(df['timestamp'], df['volatility'], color='purple')
+    plt.ylabel('Volatilidade Anualizada')
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('trading_report.png', dpi=150)
+    
+    # HTML
+    html = f"""
     <html>
-    <head>
-        <title>Relatório de Trading</title>
-        <style>
-            body {{ font-family: Arial; margin: 20px; }}
-            h1 {{ color: #333; }}
-            .info {{ background: #f5f5f5; padding: 15px; border-radius: 5px; }}
-        </style>
-    </head>
+    <head><title>Relatório de Trading</title></head>
     <body>
-        <h1>Relatório Diário</h1>
-        <p>Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-        
-        <div class="info">
-            <h3>Dados Estatísticos</h3>
-            <p>Período: {len(df)} candles (15min)</p>
-            <p>Último preço: {df['close'].iloc[-1]:.2f} USDT</p>
-        </div>
-        
-        <img src="price_chart.png" width="100%">
+        <h1>Relatório Completo</h1>
+        <p>Último sinal: <strong>{last_signal}</strong></p>
+        <p>Win rate histórico: <strong>{win_rate:.2%}</strong></p>
+        <img src="trading_report.png" width="100%">
     </body>
     </html>
     """
     
     with open('report.html', 'w') as f:
-        f.write(report)
+        f.write(html)
 
 if __name__ == "__main__":
     generate_report()
