@@ -2,15 +2,14 @@ import pandas as pd
 import numpy as np
 import joblib
 import traceback
-import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 import requests
 from datetime import datetime
 
-# Configurações do Telegram (SUAS CREDENCIAIS JÁ ESTÃO AQUI)
+# Configurações do Telegram
 BOT_TOKEN = "7888207477:AAFSKnKaBuOPDWPPVp25f-2AEREsjXucxvA"
 CHAT_ID = "1367800874"
 
@@ -18,62 +17,75 @@ def send_telegram_alert(message):
     """Envia alertas para seu Telegram"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={CHAT_ID}&text={message}"
     try:
-        response = requests.get(url, timeout=10)
-        return response.json()
-    except Exception as e:
-        print(f"Erro ao enviar Telegram: {str(e)}")
-        return None
+        requests.get(url, timeout=10)
+    except:
+        pass
 
 def load_data():
-    """Carrega e prepara os dados"""
+    """Carrega e prepara os dados com verificação robusta"""
     try:
         df = pd.read_csv('ml_ready_data.csv')
         
+        # Verificações críticas
         if len(df) < 1000:
             raise ValueError(f"Dados insuficientes (apenas {len(df)} registros)")
             
-        # Garantir que temos a coluna target
         if 'target' not in df.columns:
             raise ValueError("Coluna 'target' não encontrada")
+            
+        # Contar classes
+        class_counts = df['target'].value_counts()
+        send_telegram_alert(f"📊 Distribuição de classes:\n{class_counts.to_string()}")
+        
+        if min(class_counts) < 10:  # Mínimo de amostras por classe
+            raise ValueError(f"Classe minoritária tem apenas {min(class_counts)} amostras")
             
         return df.dropna()
         
     except Exception as e:
-        error_msg = f"❌ Falha ao carregar dados: {str(e)}"
+        error_msg = f"❌ Falha no carregamento: {str(e)}"
         send_telegram_alert(error_msg)
         print(traceback.format_exc())
         return None
 
 def train_model(df):
-    """Treina o modelo com validação cruzada temporal"""
+    """Treina o modelo com fallback para dados desbalanceados"""
     try:
         X = df.drop(columns=['target', 'timestamp'])
         y = df['target']
         
-        # Balanceamento de classes
-        smote = SMOTE(random_state=42)
-        X_res, y_res = smote.fit_resample(X, y)
+        # Tentar SMOTE apenas se tiver amostras suficientes
+        if y.value_counts().min() > 5:
+            smote = SMOTE(random_state=42, k_neighbors=min(5, y.value_counts().min()-1))
+            X_res, y_res = smote.fit_resample(X, y)
+            send_telegram_alert("🔁 Aplicado balanceamento SMOTE")
+        else:
+            X_res, y_res = X, y
+            send_telegram_alert("⚠️ Dados desbalanceados - SMOTE omitido")
         
-        # Configuração do modelo
+        # Configuração simplificada para primeira execução
         model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
             class_weight='balanced',
             random_state=42,
             n_jobs=-1
         )
         
-        # Parâmetros para otimização
-        params = {
-            'n_estimators': [50, 100],
-            'max_depth': [5, 10],
-            'min_samples_split': [2, 5]
-        }
-        
         # Validação cruzada temporal
         tscv = TimeSeriesSplit(n_splits=3)
-        grid = GridSearchCV(model, params, cv=tscv, scoring='accuracy', verbose=1)
-        grid.fit(X_res, y_res)
+        accuracies = []
         
-        return grid.best_estimator_, grid.best_score_
+        for train_idx, test_idx in tscv.split(X_res):
+            X_train, X_test = X_res.iloc[train_idx], X_res.iloc[test_idx]
+            y_train, y_test = y_res.iloc[train_idx], y_res.iloc[test_idx]
+            
+            model.fit(X_train, y_train)
+            preds = model.predict(X_test)
+            accuracies.append(accuracy_score(y_test, preds))
+        
+        avg_accuracy = np.mean(accuracies)
+        return model, avg_accuracy
         
     except Exception as e:
         error_msg = f"❌ Falha no treinamento: {str(e)}"
@@ -81,22 +93,19 @@ def train_model(df):
         print(traceback.format_exc())
         return None, 0
 
-def save_results(model, accuracy):
-    """Salva o modelo e relatório"""
+def save_model(model, accuracy):
+    """Salva o modelo e relatório simplificado"""
     try:
-        # Salvar modelo
         joblib.dump(model, 'trading_model.pkl')
         
-        # Salvar metadados
-        with open('model_metadata.txt', 'w') as f:
+        with open('model_report.txt', 'w') as f:
             f.write(f"Modelo treinado em: {datetime.now()}\n")
-            f.write(f"Acurácia: {accuracy:.2%}\n")
-            f.write(f"Features usadas: {model.n_features_in_}\n")
+            f.write(f"Acurácia média: {accuracy:.2%}\n")
+            f.write(f"Features: {list(model.feature_names_in_)}\n")
         
         return True
     except Exception as e:
-        error_msg = f"❌ Falha ao salvar modelo: {str(e)}"
-        send_telegram_alert(error_msg)
+        send_telegram_alert(f"❌ Falha ao salvar modelo: {str(e)}")
         return False
 
 if __name__ == "__main__":
@@ -113,7 +122,7 @@ if __name__ == "__main__":
         exit(1)
     
     # Passo 3: Salvar resultados
-    if save_results(model, accuracy):
-        send_telegram_alert(f"✅ Modelo treinado com sucesso!\nAcurácia: {accuracy:.2%}")
+    if save_model(model, accuracy):
+        send_telegram_alert(f"✅ Modelo treinado!\nAcurácia: {accuracy:.2%}")
     else:
-        send_telegram_alert("⚠️ Modelo treinado mas falha ao salvar!")
+        send_telegram_alert("⚠️ Modelo treinado mas não salvo")
