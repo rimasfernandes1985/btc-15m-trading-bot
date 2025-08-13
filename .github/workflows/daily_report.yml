@@ -1,0 +1,37 @@
+name: Daily Trading Report
+
+on:
+  schedule:
+    - cron: '0 18 * * *'  # 15h BRT (18h UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          pip install pandas matplotlib
+          
+      - name: Generate report
+        run: python monitor.py
+        
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: daily-trading-report
+          path: |
+            report.html
+            price_chart.png
+          retention-days: 3
