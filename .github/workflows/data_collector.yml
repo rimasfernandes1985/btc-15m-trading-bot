@@ -15,8 +15,8 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install ccxt pandas python-dotenv
+- name: Install dependencies
+  run: pip install -r requirements.txt
 
       - name: Run data collector
         env:
