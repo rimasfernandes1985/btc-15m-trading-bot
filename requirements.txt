@@ -1,5 +1,10 @@
-ccxt==4.4.99
-pandas==2.2.2
-python-dotenv==1.0.1
-requests==2.32.4
-joblib==1.4.2  # Adicionando a biblioteca faltante
+# Bibliotecas essenciais
+ccxt==4.4.99          # Conexão com exchanges
+pandas==2.2.2         # Manipulação de dados
+python-dotenv==1.0.1  # Gerenciamento de variáveis de ambiente
+requests==2.32.4      # Chamadas HTTP (para o Telegram)
+
+# Análise técnica e ML
+ta==0.11.0            # Indicadores técnicos (SMA, RSI, etc.)
+scikit-learn==1.5.0   # Machine Learning (se usar modelos)
+joblib==1.4.2         # Salvar modelos (opcional)
