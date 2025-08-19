@@ -7,8 +7,13 @@ on:
 jobs:
   collect:
     runs-on: ubuntu-latest
+    permissions:  # Adiciona permissões explícitas
+      contents: write  # Permite escrever no repositório
+    
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # Usa token com permissões
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -16,7 +21,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install ccxt pandas python-dotenv requests ta
 
       - name: Run data collector
         env:
@@ -35,4 +40,5 @@ jobs:
           git config --global user.name "GitHub Actions"
           git add btc_data.csv
           git commit -m "Update BTC data [skip ci]"
-          git push
+          git pull --rebase origin main
+          git push origin HEAD:main
