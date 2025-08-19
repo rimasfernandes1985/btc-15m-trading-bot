@@ -7,13 +7,13 @@ on:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    permissions:  # Adiciona permissões explícitas
+    permissions:
       contents: write  # Permite escrever no repositório
     
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}  # Usa token com permissões
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -21,7 +21,13 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install ccxt pandas python-dotenv requests ta
+        run: |
+          pip install ccxt==4.4.99
+          pip install pandas==2.2.2
+          pip install python-dotenv==1.0.1
+          pip install requests==2.32.4
+          pip install ta==0.11.0
+          pip install joblib==1.4.2  # Adicionando joblib explicitamente
 
       - name: Run data collector
         env:
