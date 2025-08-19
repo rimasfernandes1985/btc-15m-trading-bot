@@ -1,7 +1,6 @@
 import ccxt
 import pandas as pd
 import requests
-import joblib
 from datetime import datetime
 from data_preprocessor import preprocess_data
 
