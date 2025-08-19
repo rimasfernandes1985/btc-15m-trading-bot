@@ -1,144 +1,41 @@
-import pandas as pd
-import numpy as np
-import joblib
-import traceback
-import requests
-from datetime import datetime
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import accuracy_score
-from imblearn.over_sampling import RandomOverSampler  # Alterado para versão mais robusta
+name: ML Model Trainer
+on:
+  workflow_dispatch:  # Execução manual
+  schedule:
+    - cron: '0 18 * * 1-5'  # Diariamente às 15h BRT (18h UTC)
 
-# Configurações do Telegram (suas credenciais já estão aqui)
-BOT_TOKEN = "7888207477:AAFSKnKaBuOPDWPPVp25f-2AEREsjXucxvA"
-CHAT_ID = "1367800874"
-
-def send_telegram_alert(message):
-    """Envia alertas para seu Telegram com tratamento de erros"""
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={CHAT_ID}&text={message}"
-    try:
-        response = requests.get(url, timeout=10)
-        return response.status_code == 200
-    except:
-        return False
-
-def load_data():
-    """Carrega e valida os dados com verificações rigorosas"""
-    try:
-        df = pd.read_csv('ml_ready_data.csv')
-        
-        # Verificações essenciais
-        if len(df) < 500:
-            raise ValueError(f"Dados insuficientes (apenas {len(df)} registros)")
-        
-        if 'target' not in df.columns:
-            raise ValueError("Coluna 'target' não encontrada")
-            
-        # Análise de distribuição
-        class_counts = df['target'].value_counts()
-        send_telegram_alert(
-            f"📊 Distribuição de Classes:\n"
-            f"Classe 0: {class_counts.get(0, 0)} amostras\n"
-            f"Classe 1: {class_counts.get(1, 0)} amostras"
-        )
-        
-        if class_counts.get(1, 0) < 3:  # Mínimo absoluto
-            raise ValueError(f"Apenas {class_counts.get(1, 0)} amostras da classe 1")
-            
-        return df.dropna()
-        
-    except Exception as e:
-        error_msg = f"❌ Falha na carga de dados: {str(e)}"
-        send_telegram_alert(error_msg)
-        print(traceback.format_exc())
-        return None
-
-def train_model(df):
-    """Versão ultra-robusta de treinamento"""
-    try:
-        X = df.drop(columns=['target', 'timestamp'])
-        y = df['target']
-        min_samples = y.value_counts().min()
-        
-        # Balanceamento adaptativo
-        if min_samples >= 3:
-            ros = RandomOverSampler(random_state=42)
-            X_res, y_res = ros.fit_resample(X, y)
-            send_telegram_alert("🔁 Balanceamento aplicado (RandomOverSampler)")
-        else:
-            X_res, y_res = X, y
-            send_telegram_alert("⚠️ Sem balanceamento - amostras insuficientes")
-        
-        # Modelo conservador para dados limitados
-        model = RandomForestClassifier(
-            n_estimators=50,
-            max_depth=5,
-            class_weight='balanced_subsample',
-            random_state=42,
-            n_jobs=-1
-        )
-        
-        # Validação cruzada segura
-        n_splits = min(3, len(X_res)//100) or 1
-        tscv = TimeSeriesSplit(n_splits=n_splits)
-        accuracies = []
-        
-        for train_idx, test_idx in tscv.split(X_res):
-            try:
-                X_train, X_test = X_res.iloc[train_idx], X_res.iloc[test_idx]
-                y_train, y_test = y_res.iloc[train_idx], y_res.iloc[test_idx]
-                
-                model.fit(X_train, y_train)
-                accuracies.append(accuracy_score(y_test, model.predict(X_test)))
-            except Exception as e:
-                print(f"Erro no fold: {str(e)}")
-                continue
-                
-        if not accuracies:
-            raise ValueError("Nenhum fold completou com sucesso")
-            
-        avg_accuracy = np.mean(accuracies)
-        return model, avg_accuracy
-        
-    except Exception as e:
-        error_msg = f"❌ Falha no treinamento: {str(e)}"
-        send_telegram_alert(error_msg)
-        print(traceback.format_exc())
-        return None, 0
-
-def save_model_results(model, accuracy):
-    """Salva todos os artefatos do modelo"""
-    try:
-        # Salvar modelo
-        joblib.dump(model, 'trading_model.pkl')
-        
-        # Salvar relatório
-        with open('model_report.txt', 'w') as f:
-            f.write(f"=== Relatório do Modelo ===\n")
-            f.write(f"Data: {datetime.now()}\n")
-            f.write(f"Acurácia média: {accuracy:.2%}\n")
-            f.write(f"Features usadas: {list(model.feature_names_in_)}\n")
-            f.write(f"Classes: {model.classes_}\n")
-        
-        return True
-    except Exception as e:
-        send_telegram_alert(f"❌ Falha ao salvar modelo: {str(e)}")
-        return False
-
-if __name__ == "__main__":
-    send_telegram_alert("⏳ Iniciando treinamento do modelo...")
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
-    # Fluxo principal
-    df = load_data()
-    if df is not None:
-        model, accuracy = train_model(df)
-        if model is not None:
-            if save_model_results(model, accuracy):
-                send_telegram_alert(
-                    f"✅ Modelo treinado com sucesso!\n"
-                    f"Acurácia: {accuracy:.2%}\n"
-                    f"Features: {len(model.feature_names_in_)}"
-                )
-            else:
-                send_telegram_alert("⚠️ Modelo treinado mas não salvo")
-    send_telegram_alert("🏁 Processo de treinamento concluído")
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          pip install pandas scikit-learn joblib numpy
+          pip install ta  # Para pré-processamento
+          
+      - name: Run data preprocessing
+        run: python data_preprocessor.py
+        
+      - name: Train ML model
+        run: python ml_trainer.py
+        
+      - name: Commit updated model
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "ML Trainer"
+          git add trading_model.pkl
+          git diff --staged --quiet || git commit -m "[Automated] Update trading model"
+          git push origin HEAD:main
