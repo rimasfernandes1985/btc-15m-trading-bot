@@ -58,4 +58,8 @@ if __name__ == "__main__":
         input_path='seu_arquivo_grande.csv',
         output_path='btc_15m_recent.csv',
         sample_size=50000  # Últimas 50k velas de 15min
+# Arquivos grandes
+*.csv
+!btc_15m_recent.csv  # Exceto este
+seu_arquivo_grande.csv
     )
