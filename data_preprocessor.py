@@ -1,53 +1,61 @@
 import pandas as pd
 import numpy as np
-from ta import add_all_ta_features
-from ta.utils import dropna
-import traceback
+from datetime import datetime, timedelta
 
-def preprocess_data(df):
-    try:
-        # Verificar colunas necessárias
-        required_cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-        if not all(col in df.columns for col in required_cols):
-            missing = [col for col in required_cols if col not in df.columns]
-            print(f"Colunas faltando: {missing}")
-            return None
-            
-        # Converter timestamp
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df = df.sort_values('timestamp').reset_index(drop=True)
-        
-        # Remover valores NaN
-        df = dropna(df)
-        
-        # Adicionar indicadores
-        df = add_all_ta_features(
-            df, 
-            open="open", 
-            high="high", 
-            low="low", 
-            close="close", 
-            volume="volume",
-            fillna=True
-        )
-        
-        # Features adicionais
-        df['price_change'] = df['close'].pct_change()
-        df['volatility'] = df['close'].rolling(window=5).std()
-        
-        # Target
-        df['target'] = np.where(
-            df['close'].shift(-1) > df['close'] * 1.01, 1, 0
-        )
-        
-        # Remover linhas sem target
-        df = df.dropna(subset=['target'])
-        
-        # Selecionar colunas
-        keep_cols = [col for col in df.columns if not col.startswith(('trend_psar', 'others'))]
-        return df[keep_cols].copy()
+def process_large_historical_data(input_path='btc_1m_historical.csv', 
+                                 output_path='btc_15m_historical.csv',
+                                 sample_size=50000):
+    """
+    Processa grandes arquivos históricos de forma eficiente
+    """
+    print("📊 Processando dados históricos...")
     
-    except Exception as e:
-        print(f"Erro no pré-processamento: {e}")
-        print(traceback.format_exc())
-        return None
+    # Leitura em chunks para não sobrecarregar memória
+    chunk_size = 100000
+    processed_chunks = []
+    
+    for chunk in pd.read_csv(input_path, chunksize=chunk_size):
+        # Padroniza colunas
+        chunk.columns = chunk.columns.str.lower().str.strip()
+        
+        # Converte timestamp
+        chunk['timestamp'] = pd.to_datetime(chunk['timestamp'])
+        
+        # Ordena
+        chunk = chunk.sort_values('timestamp')
+        
+        # Converte para 15min
+        chunk = chunk.set_index('timestamp')
+        chunk_15m = chunk.resample('15T').agg({
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum'
+        }).dropna()
+        
+        processed_chunks.append(chunk_15m)
+    
+    # Combina todos os chunks processados
+    final_data = pd.concat(processed_chunks)
+    final_data = final_data.sort_index()
+    
+    # Remove duplicatas
+    final_data = final_data[~final_data.index.duplicated(keep='last')]
+    
+    # Amostra recente (últimos X registros)
+    recent_data = final_data.tail(sample_size)
+    
+    # Salva arquivo reduzido
+    recent_data.to_csv(output_path)
+    print(f"✅ Arquivo reduzido salvo: {len(recent_data)} velas de 15min")
+    
+    return recent_data
+
+# Uso:
+if __name__ == "__main__":
+    data = process_large_historical_data(
+        input_path='seu_arquivo_grande.csv',
+        output_path='btc_15m_recent.csv',
+        sample_size=50000  # Últimas 50k velas de 15min
+    )
