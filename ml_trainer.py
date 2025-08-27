@@ -28,22 +28,33 @@ def train_model():
     # 👇 DIAGNÓSTICO (adicione estas linhas)
     print("\n=== DIAGNÓSTICO DOS DADOS ===")
     print(f"Colunas disponíveis: {list(data.columns)}")
-    print(f"Primeiras 3 linhas:\n{data.head(3)}")
+    print(f"Tipos de dados:\n{data.dtypes}")
     
-    # Verificar se a coluna 'signal' existe
-    if 'signal' not in data.columns:
-        print("❌ ERRO: Coluna 'signal' não encontrada!")
-        print("Execute o data_preprocessor.py primeiro")
-        return False
+    # Remover colunas não numéricas (timestamp, etc.)
+    non_numeric_cols = data.select_dtypes(include=['object', 'datetime']).columns
+    if len(non_numeric_cols) > 0:
+        print(f"Removendo colunas não numéricas: {list(non_numeric_cols)}")
+        data = data.drop(columns=non_numeric_cols)
     
     # Verificar se há dados suficientes
     if len(data) < 100:
         print("Erro: Dados insuficientes para treinamento (mínimo 100 amostras)")
         return False
     
+    # Verificar se a coluna 'signal' existe
+    if 'signal' not in data.columns:
+        print("❌ ERRO: Coluna 'signal' não encontrada!")
+        return False
+    
     # Separar features (X) e target (y)
     X = data.drop('signal', axis=1)
     y = data['signal']
+    
+    # Verificar se há valores NaN
+    if X.isnull().any().any():
+        print("⚠️  Removendo valores NaN...")
+        X = X.dropna()
+        y = y[X.index]
     
     # Dividir dados
     X_train, X_test, y_train, y_test = train_test_split(
