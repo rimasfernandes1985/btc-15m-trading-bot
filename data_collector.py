@@ -1,70 +1,57 @@
 import ccxt
 import pandas as pd
-import requests
 from datetime import datetime
-from data_preprocessor import preprocess_data
+import requests
+import os
+from dotenv import load_dotenv
 
-# Configurações
-BOT_TOKEN = "7888207477:AAFSKnKaBuOPDWPPVp25f-2AEREsjXucxvA"
-CHAT_ID = "1367800874"
-exchange = ccxt.kucoin({'enableRateLimit': True})
+# Carrega variáveis do .env
+load_dotenv('btc-trader.env')
 
+# Configuração da exchange
+exchange = ccxt.kucoin({
+    'apiKey': os.getenv("KUCOIN_API_KEY"),
+    'secret': os.getenv("KUCOIN_SECRET"),
+    'password': os.getenv("KUCOIN_PASSPHRASE"),
+    'enableRateLimit': True
+})
+
+# Função de alerta (COMENTADA - notificações desativadas)
 def send_telegram_alert(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={CHAT_ID}&text={message}"
-    try:
-        requests.get(url, timeout=10)
-    except:
-        pass
-
-def calculate_risk_level(current_price):
-    """Calcula níveis de risco com base na volatilidade recente"""
-    df = pd.read_csv('btc_data.csv').tail(20)
-    volatility = df['close'].std()
-    return {
-        'stop_loss': current_price * 0.995,
-        'take_profit': current_price * 1.01,
-        'risk_score': min(volatility / current_price * 100, 5)  # Score 0-5
-    }
+    # bot_token = os.getenv("BOT_TOKEN")
+    # chat_id = os.getenv("CHAT_ID")
+    # url = f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={message}"
+    # requests.get(url).json()
+    print(f"📧 Notificação (desativada): {message}")  # Apenas log interno
 
 try:
-    # Coleta de dados
+    # 1. Coleta dados
+    print("📊 Coletando dados BTC/USDT...")
     ohlcv = exchange.fetch_ohlcv('BTC/USDT', '15m', limit=1000)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    
-    # Salvar dados brutos
+
+    # 2. Salva dados
     try:
         existing = pd.read_csv('btc_data.csv')
         updated = pd.concat([existing, df]).drop_duplicates('timestamp')
         updated.to_csv('btc_data.csv', index=False)
+        print("💾 Dados atualizados no CSV")
     except FileNotFoundError:
         df.to_csv('btc_data.csv', index=False)
-    
-    # Pré-processamento
-    ml_data = preprocess_data(df.copy())
-    
-    if ml_data is not None:
-        ml_data.to_csv('ml_ready_data.csv', index=False)
-        
-        # Previsão com modelo
-        try:
-            model = joblib.load('trading_model.pkl')
-            last_row = ml_data.iloc[[-1]].drop(columns=['target', 'timestamp'])
-            prediction = model.predict(last_row)[0]
-            proba = model.predict_proba(last_row)[0][1]
-            
-            if prediction == 1 and proba > 0.6:
-                risk = calculate_risk_level(df['close'].iloc[-1])
-                send_telegram_alert(
-                    f"🚀 SINAL FORTE DE COMPRA\n"
-                    f"Confiança: {proba:.2%}\n"
-                    f"Preço: {df['close'].iloc[-1]:.2f} USD\n"
-                    f"Stop Loss: {risk['stop_loss']:.2f}\n"
-                    f"Take Profit: {risk['take_profit']:.2f}\n"
-                    f"Risco: {risk['risk_score']:.1f}/5"
-                )
-        except Exception as e:
-            send_telegram_alert(f"⚠️ Erro na previsão: {str(e)}")
+        print("💾 Novo arquivo CSV criado")
 
+    # 3. Notificação (COMENTADA - desativada)
+    # send_telegram_alert("✅ Dados do BTC atualizados!")
+
+except ccxt.NetworkError as e:
+    print(f"📵 Erro de rede: {str(e)}")
+    # send_telegram_alert(f"📵 Falha na rede: {str(e)}")
+except ccxt.ExchangeError as e:
+    print(f"⚠️ Erro da exchange: {str(e)}")
+    # send_telegram_alert(f"⚠️ Erro da exchange: {str(e)}")
 except Exception as e:
-    send_telegram_alert(f"❌ Erro crítico: {str(e)}")
+    print(f"❌ Erro inesperado: {str(e)}")
+    # send_telegram_alert(f"❌ Erro inesperado: {str(e)}")
+
+print("✅ Execução concluída (notificações desativadas)")
